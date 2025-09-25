@@ -3,7 +3,6 @@ package test
 import (
 	"fmt"
 	"github.com/FxPool/fxeccsocket"
-	"github.com/FxPool/fxeccsocket/example"
 	"io"
 	"log"
 	"net"
@@ -105,14 +104,4 @@ func Test_EccSocket(t *testing.T) {
 
 	// Start the client
 	startClient()
-}
-
-// 1: cd to current path
-// 2: use command like this: go test  -v -test.run Test_Example
-func Test_Example(t *testing.T) {
-	example.ExampleWithFixedKeys()
-	example.ExampleWithEphemeralKeys()
-	example.ExampleWithDifferentCurves()
-	example.ExampleWithPEMFiles()
-	example.ExamplePerformanceTest()
 }
