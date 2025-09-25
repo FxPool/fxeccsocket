@@ -1,4 +1,4 @@
-module github.com/FxPool/fxeccsocket
+module github.com/fxpool/fxeccsocket
 
 go 1.24.0
 
