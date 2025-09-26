@@ -3,7 +3,7 @@ package examples
 import (
 	"crypto/elliptic"
 	"fmt"
-	"github.com/FxPool/fxeccsocket"
+	"github.com/fxpool/fxeccsocket"
 	"log"
 	"net"
 	"time"

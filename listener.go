@@ -1,9 +1,51 @@
 package fxeccsocket
 
 import (
+	"crypto/ecdsa"
 	"crypto/elliptic"
 	"net"
 )
+
+// ECCListener represents a listener that accepts ECC-encrypted connections.
+type ECCListener struct {
+	listener net.Listener
+	config   *Config
+}
+
+// Config holds configuration parameters for ECC encryption.
+type Config struct {
+	Curve           elliptic.Curve
+	PrivateKey      *ecdsa.PrivateKey
+	PublicKey       *ecdsa.PublicKey
+	UseEphemeralKey bool
+	Obfuscation     *ObfuscationConfig // Obfuscation configuration
+}
+
+// Accept waits for and returns the next encrypted connection to the listener.
+func (el *ECCListener) Accept() (net.Conn, error) {
+	conn, err := el.listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	eccConn, err := NewConn(conn, el.config, false)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	return eccConn, nil
+}
+
+// Close closes the listener.
+func (el *ECCListener) Close() error {
+	return el.listener.Close()
+}
+
+// Addr returns the listener's network address.
+func (el *ECCListener) Addr() net.Addr {
+	return el.listener.Addr()
+}
 
 // Dial establishes an encrypted connection to the specified network address.
 // It performs a handshake to exchange public keys and derive symmetric encryption keys.

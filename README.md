@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Go Reference](https://pkg.go.dev/badge/github.com/FxPool/fxeccsocket.svg)](https://pkg.go.dev/github.com/FxPool/fxeccsocket)
+[![Go Reference](https://pkg.go.dev/badge/github.com/fxpool/fxeccsocket.svg)](https://pkg.go.dev/github.com/fxpool/fxeccsocket)
 
 A secure network communication library for Go that provides end-to-end encrypted communication using Elliptic Curve
 Cryptography (ECC).

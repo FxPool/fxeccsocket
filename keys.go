@@ -12,7 +12,7 @@ import (
 	"io"
 )
 
-// GenerateKey generates a new ECDSA key pair using the specified curve.
+// GenerateKey creates a new ECDSA key pair using the specified curve.
 // If curve is nil, P256 will be used by default.
 func GenerateKey(curve elliptic.Curve) (*ecdsa.PrivateKey, error) {
 	if curve == nil {

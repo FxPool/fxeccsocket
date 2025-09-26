@@ -14,6 +14,20 @@ import (
 	"time"
 )
 
+// Constants
+const (
+	nonceSize        = 12
+	keySize          = 32
+	maxMessageSize   = 64 * 1024
+	handshakeTimeout = 10 * time.Second
+)
+
+// Message types
+const (
+	msgTypePublicKey = 0x01
+	msgTypeEncrypted = 0x02
+)
+
 // ECCConn represents an encrypted connection using ECC for key exchange
 // and symmetric encryption for data transfer.
 type ECCConn struct {
@@ -29,36 +43,21 @@ type ECCConn struct {
 	sendCounter uint64
 	recvCounter uint64
 
-	mu sync.Mutex
+	// Obfuscation components (lazy initialized for performance)
+	obfuscationEnabled bool
+	obfuscationMode    ObfuscationMode
+	obfuscationConfig  *ObfuscationConfig
+	obfuscator         obfuscator // Interface for different obfuscation strategies
+	obfuscatorInit     sync.Once
+
+	// Buffers for performance optimization
+	readBuffer  *sync.Pool
+	writeBuffer *sync.Pool
+	headerPool  *sync.Pool
+
+	readMu  sync.Mutex // 单独的读锁
+	writeMu sync.Mutex // 单独的写锁
 }
-
-// ECCListener represents a listener that accepts ECC-encrypted connections.
-type ECCListener struct {
-	listener net.Listener
-	config   *Config
-}
-
-// Config holds configuration parameters for ECC encryption.
-type Config struct {
-	Curve           elliptic.Curve
-	PrivateKey      *ecdsa.PrivateKey
-	PublicKey       *ecdsa.PublicKey
-	UseEphemeralKey bool
-}
-
-// Constants
-const (
-	nonceSize        = 12
-	keySize          = 32
-	maxMessageSize   = 64 * 1024
-	handshakeTimeout = 10 * time.Second
-)
-
-// Message types
-const (
-	msgTypePublicKey = 0x01
-	msgTypeEncrypted = 0x02
-)
 
 // NewConn creates a new ECCConn from an existing network connection.
 // It handles the key exchange handshake and sets up the symmetric encryption.
@@ -71,7 +70,26 @@ func NewConn(conn net.Conn, config *Config, isClient bool) (*ECCConn, error) {
 		config.Curve = elliptic.P256()
 	}
 
-	eccConn := &ECCConn{conn: conn}
+	eccConn := &ECCConn{
+		conn: conn,
+		// Initialize object pools for performance
+		readBuffer: &sync.Pool{
+			New: func() interface{} { return make([]byte, 0, 4096) },
+		},
+		writeBuffer: &sync.Pool{
+			New: func() interface{} { return make([]byte, 0, 4096) },
+		},
+		headerPool: &sync.Pool{
+			New: func() interface{} { return make([]byte, 5) },
+		},
+	}
+
+	// Setup obfuscation configuration (lazy initialization for performance)
+	if config.Obfuscation != nil && config.Obfuscation.Enabled {
+		eccConn.obfuscationEnabled = true
+		eccConn.obfuscationMode = config.Obfuscation.Mode
+		eccConn.obfuscationConfig = config.Obfuscation
+	}
 
 	// Key management: use provided private key or generate ephemeral key
 	if config.PrivateKey != nil && !config.UseEphemeralKey {
@@ -260,12 +278,15 @@ func (ec *ECCConn) deriveKeys(sharedSecret []byte, isClient bool) error {
 // It handles the message framing and decryption using the receiving AEAD cipher.
 // The nonce is updated for each message to ensure uniqueness.
 func (ec *ECCConn) Read(b []byte) (int, error) {
-	ec.mu.Lock()
-	defer ec.mu.Unlock()
+	ec.readMu.Lock()
+	defer ec.readMu.Unlock()
+
+	// Get header from pool and defer return
+	header := ec.headerPool.Get().([]byte)
+	defer ec.headerPool.Put(header)
 
 	// Read message header
-	header := make([]byte, 5)
-	if _, err := io.ReadFull(ec.conn, header); err != nil {
+	if _, err := io.ReadFull(ec.conn, header[:5]); err != nil {
 		return 0, err
 	}
 
@@ -274,7 +295,7 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 	}
 
 	length := binary.BigEndian.Uint32(header[1:5])
-	if length > maxMessageSize {
+	if length > maxMessageSize*2 { // Allow larger size for obfuscation
 		return 0, errors.New("message too large")
 	}
 
@@ -282,6 +303,19 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 	encryptedData := make([]byte, length)
 	if _, err := io.ReadFull(ec.conn, encryptedData); err != nil {
 		return 0, err
+	}
+
+	// Initialize obfuscator if needed (lazy initialization for performance)
+	if ec.obfuscationEnabled {
+		ec.obfuscatorInit.Do(func() {
+			ec.obfuscator = createObfuscator(ec.obfuscationMode, ec.obfuscationConfig, false)
+		})
+
+		var err error
+		encryptedData, err = ec.obfuscator.deobfuscate(encryptedData)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	// Update nonce and decrypt
@@ -303,8 +337,8 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 // It handles message framing and encryption using the sending AEAD cipher.
 // The nonce is updated for each message to ensure uniqueness.
 func (ec *ECCConn) Write(b []byte) (int, error) {
-	ec.mu.Lock()
-	defer ec.mu.Unlock()
+	ec.writeMu.Lock()
+	defer ec.writeMu.Unlock()
 
 	if len(b) > maxMessageSize {
 		return 0, errors.New("message too large")
@@ -315,13 +349,36 @@ func (ec *ECCConn) Write(b []byte) (int, error) {
 	encrypted := ec.sendAEAD.Seal(nil, ec.sendNonce, b, nil)
 	ec.sendCounter++
 
-	// Construct message
-	msg := make([]byte, 5+len(encrypted))
-	msg[0] = msgTypeEncrypted
-	binary.BigEndian.PutUint32(msg[1:5], uint32(len(encrypted)))
-	copy(msg[5:], encrypted)
+	// Initialize obfuscator if needed (lazy initialization for performance)
+	if ec.obfuscationEnabled {
+		ec.obfuscatorInit.Do(func() {
+			ec.obfuscator = createObfuscator(ec.obfuscationMode, ec.obfuscationConfig, true)
+		})
 
-	_, err := ec.conn.Write(msg)
+		var err error
+		encrypted, err = ec.obfuscator.obfuscate(encrypted)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	// Get buffer from pool for performance
+	msgBuf := ec.writeBuffer.Get().([]byte)
+	defer ec.writeBuffer.Put(msgBuf)
+
+	// Ensure buffer has enough capacity
+	if cap(msgBuf) < 5+len(encrypted) {
+		msgBuf = make([]byte, 5+len(encrypted))
+	} else {
+		msgBuf = msgBuf[:5+len(encrypted)]
+	}
+
+	// Construct message
+	msgBuf[0] = msgTypeEncrypted
+	binary.BigEndian.PutUint32(msgBuf[1:5], uint32(len(encrypted)))
+	copy(msgBuf[5:], encrypted)
+
+	_, err := ec.conn.Write(msgBuf)
 	if err != nil {
 		return 0, err
 	}
@@ -356,32 +413,6 @@ func (ec *ECCConn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline sets the deadline for future Write calls.
 func (ec *ECCConn) SetWriteDeadline(t time.Time) error {
 	return ec.conn.SetWriteDeadline(t)
-}
-
-// Accept waits for and returns the next encrypted connection to the listener.
-func (el *ECCListener) Accept() (net.Conn, error) {
-	conn, err := el.listener.Accept()
-	if err != nil {
-		return nil, err
-	}
-
-	eccConn, err := NewConn(conn, el.config, false)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	return eccConn, nil
-}
-
-// Close closes the listener.
-func (el *ECCListener) Close() error {
-	return el.listener.Close()
-}
-
-// Addr returns the listener's network address.
-func (el *ECCListener) Addr() net.Addr {
-	return el.listener.Addr()
 }
 
 // GetPublicKey returns the public key of the local endpoint.

@@ -1,8 +1,8 @@
-package test
+package main
 
 import (
 	"fmt"
-	"github.com/FxPool/fxeccsocket"
+	"github.com/fxpool/fxeccsocket"
 	"io"
 	"log"
 	"net"
@@ -60,7 +60,6 @@ func handleServerConnection(conn net.Conn) {
 // Client example
 func startClient() {
 	time.Sleep(100 * time.Millisecond) // Wait for server to start
-
 	conn, err := fxeccsocket.Dial("tcp", "localhost:8080", nil)
 	if err != nil {
 		log.Fatal("Client dial error:", err)
@@ -82,7 +81,6 @@ func startClient() {
 		if err != nil {
 			log.Fatal("Write error:", err)
 		}
-
 		buffer := make([]byte, 1024)
 		n, err := conn.Read(buffer)
 		if err != nil {
