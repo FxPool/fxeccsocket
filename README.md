@@ -19,6 +19,7 @@ A secure network communication library for Go that provides end-to-end encrypted
 
 ```bash
 go get github.com/FxPool/fxeccsocket
+```
 ## Quick Start
 ## Generating Key Pairs
 ```go
