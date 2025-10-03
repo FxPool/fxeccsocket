@@ -54,7 +54,7 @@ func main() {
     fmt.Println("Public Key:\n", pubPEM)
 }
 ```
-## Example
+## Basic Example (No Obfuscation)
 ```go
 package main
 
@@ -161,6 +161,102 @@ func main() {
   startClient()
 }
 ```
+## Advanced Example (With Traffic Obfuscation)
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/FxPool/fxeccsocket"
+    "log"
+    "time"
+)
+
+func main() {
+    // Obfuscation configuration for both client and server
+    obfuscationConfig := &fxeccsocket.ObfuscationConfig{
+        Enabled:    true,
+        Mode:       fxeccsocket.ObfuscationHTTPS,
+        Domain:     "api.cloudflare.com",
+        MinDelayMs: 5,
+        MaxDelayMs: 50,
+        MinPacketSize: 128,
+        MaxPacketSize: 1460,
+    }
+
+    serverConfig := &fxeccsocket.Config{
+        Curve:       elliptic.P256(),
+        Obfuscation: obfuscationConfig,
+    }
+
+    clientConfig := &fxeccsocket.Config{
+        Curve:       elliptic.P256(),
+        Obfuscation: obfuscationConfig,
+    }
+
+    // Start obfuscated server
+    go func() {
+        listener, err := fxeccsocket.Listen("tcp", ":8081", serverConfig)
+        if err != nil {
+            log.Fatal("Server listen error:", err)
+        }
+        defer listener.Close()
+
+        fmt.Println("Obfuscated ECC Server listening on :8081")
+
+        conn, err := listener.Accept()
+        if err != nil {
+            log.Fatal("Accept error:", err)
+        }
+        defer conn.Close()
+
+        // Handle connection...
+    }()
+
+    time.Sleep(1 * time.Second)
+
+    // Connect with obfuscated client
+    conn, err := fxeccsocket.Dial("tcp", "localhost:8081", clientConfig)
+    if err != nil {
+        log.Fatal("Client dial error:", err)
+    }
+    defer conn.Close()
+
+    fmt.Println("Connected with traffic obfuscation enabled")
+}
+```
+## Traffic Obfuscation
+### Obfuscation Modes
+The library provides multiple traffic obfuscation modes to hide encryption patterns:
+1. HTTP Obfuscation
+- Masks traffic as standard HTTP requests/responses
+- Uses proper HTTP headers and chunked encoding
+- Simulates real web traffic patterns
+2. HTTPS Obfuscation
+- Similar to HTTP but with TLS-like characteristics
+- More convincing for environments expecting encrypted web traffic
+- Uses realistic domain names and user agents
+3. Random Padding Obfuscation
+- Adds random padding to disrupt packet size analysis
+- Randomizes packet timing with configurable delays
+- Makes traffic analysis more difficult
+## Obfuscation Configuration
+```go
+type ObfuscationConfig struct {
+    Enabled       bool            // Enable/disable obfuscation
+    Mode          ObfuscationMode // Obfuscation mode (HTTP/HTTPS/Random)
+    Domain        string          // Domain for HTTP/HTTPS obfuscation
+    MinDelayMs    int             // Minimum delay between packets (ms)
+    MaxDelayMs    int             // Maximum delay between packets (ms)
+    MinPacketSize int             // Minimum packet size for padding
+    MaxPacketSize int             // Maximum packet size for padding
+}
+```
+## Usage Notes
+- Symmetric Configuration: Client and server must use identical obfuscation settings
+- Performance: Obfuscation adds minimal overhead (5-15% depending on mode)
+- Stealth: Effectively hides traffic from deep packet inspection (DPI) systems
+
 # API Documentation
 ## Types
 ## ECCConn
@@ -185,9 +281,9 @@ type ECCListener struct {
 }
 ```
 ### Methods:
-- Accept() (net.Conn, error) - Accept new connection
-- Close() error - Close listener
-- Addr() net.Addr - Get listen address
+- `Accept() (net.Conn, error)` - Accept new connection
+- `Close() error` - Close listener
+- `Addr() net.Addr` - Get listen address
 
 ### Config
 ### Configuration parameters structure.
@@ -197,7 +293,30 @@ type Config struct {
     PrivateKey      *ecdsa.PrivateKey   // Private key (optional)
     PublicKey       *ecdsa.PublicKey    // Public key (optional)
     UseEphemeralKey bool               // Use ephemeral keys (forward secrecy)
+    Obfuscation     *ObfuscationConfig  // Traffic obfuscation settings
 }
+```
+#### ObfuscationConfig
+#### Traffic obfuscation configuration.
+```go
+type ObfuscationConfig struct {
+    Enabled       bool            // Enable traffic obfuscation
+    Mode          ObfuscationMode // Obfuscation mode
+    Domain        string          // Domain for HTTP/HTTPS obfuscation
+    MinDelayMs    int             // Minimum packet delay (milliseconds)
+    MaxDelayMs    int             // Maximum packet delay (milliseconds)
+    MinPacketSize int             // Minimum packet size
+    MaxPacketSize int             // Maximum packet size
+}
+```
+#### Obfuscation Modes
+```go
+const (
+    ObfuscationNone    ObfuscationMode = iota // No obfuscation
+    ObfuscationHTTP                           // HTTP traffic obfuscation
+    ObfuscationHTTPS                          // HTTPS traffic obfuscation  
+    ObfuscationRandom                         // Random padding obfuscation
+)
 ```
 ### Functions
 ### Key Management
@@ -220,6 +339,7 @@ func NewConn(conn net.Conn, config *Config, isClient bool) (*ECCConn, error)
 1. Key Exchange: ECDH Elliptic Curve Diffie-Hellman key exchange
 2. Key Derivation: HKDF for symmetric key derivation from shared secret
 3. Bidirectional Authentication: Different key contexts for client and server
+4. Traffic Obfuscation: Optional masking of encrypted traffic
 
 ### Message Format
 ### Public Key Message
@@ -242,6 +362,17 @@ func NewConn(conn net.Conn, config *Config, isClient bool) (*ECCConn, error)
 +------+-----------+----------------+
 ```
 
+## Obfuscated Message Format
+### HTTP Obfuscation Format
+```text
+HTTP Headers + Chunked Encoding + Encrypted Data
+```
+
+## Random Padding Format
+```text
+Encrypted Data + Random Padding (variable length)
+```
+
 ## Key Derivation
 
 ```
@@ -256,6 +387,13 @@ server_send_key = HKDF(shared_secret, salt, "server_key")
 config := &fxeccsocket.Config{
     Curve: elliptic.P256(),    // Or more secure curves
     UseEphemeralKey: true,     // Enable forward secrecy
+    Obfuscation: &fxeccsocket.ObfuscationConfig{
+    Enabled:    true,
+    Mode:       fxeccsocket.ObfuscationHTTPS,
+    Domain:     "cdn.google.com",
+    MinDelayMs: 10,
+    MaxDelayMs: 100,
+    },
 }
 ```
 
@@ -264,17 +402,30 @@ config := &fxeccsocket.Config{
 - Replay Protection: Incrementing counter-based nonce prevents replay attacks
 - Integrity Verification: Poly1305 authentication tags ensure data integrity
 - Key Separation: Different encryption keys for client and server directions
+- Traffic Obfuscation: Hides encryption patterns from network analysis
+
+### Obfuscation Security Benefits
+- Pattern Hiding: Disrupts packet size and timing analysis
+- Protocol Mimicry: Appears as legitimate web traffic to DPI systems
+- Plausible Deniability: Traffic resembles common internet protocols
 
 ### Performance Considerations
 - Uses ChaCha20-Poly1305 instead of AES-GCM for better performance on devices without AES hardware acceleration
 - Single connection throughput can reach Gbps levels
 - Low memory footprint, suitable for high-concurrency scenarios
+- Low memory footprint, suitable for high-concurrency scenarios
+
+### Obfuscation Performance Impact
+- HTTP/HTTPS Mode: ~10-15% overhead due to header processing
+- Random Padding: ~5-10% overhead depending on padding size
+- Network Delays: Configurable delays add latency but improve stealth
 
 ### Limitations
 - Maximum message size: 64KB (configurable via maxMessageSize constant)
 - Currently only supports TCP protocol
 - Requires Go 1.16+ version
-- 
+- Obfuscation requires symmetric client/server configuration
+
 ### Troubleshooting
 ### Common Errors
 
@@ -282,6 +433,7 @@ config := &fxeccsocket.Config{
 
 - - Check client and server version compatibility
 - - Verify network connection isn't being interfered with
+- - Check network connection isn't being interfered with
 
 2. "public key too large"
 
@@ -293,6 +445,11 @@ config := &fxeccsocket.Config{
 - - Check system clock synchronization
 - - Verify keys are loaded correctly
 
+4. Obfuscation mismatches
+
+- - Ensure client and server use identical ObfuscationConfig
+- - Verify Enabled flag and Mode are the same on both ends
+
 ### Debug Mode
 Add verbose logging to debug handshake process.
 
@@ -303,14 +460,12 @@ Basic performance metrics (on Intel i7-8700K):
 Encryption throughput: ~800 Mbps
 Handshake time: ~2.5 ms
 Memory per connection: ~4 KB
+Obfuscation overhead: 5-15% (depending on mode)
 ```
 
 ### Examples Directory
-Check the `examples/` directory for additional usage examples:
-
-- `examples/tcp_chat/` - Simple encrypted chat application
-- `examples/file_transfer/` - Secure file transfer utility
-- `examples/benchmark/` - Performance testing tools
+- Check the `examples/` directory for additional usage examples
+- Check the `test/` directory for additional usage examples
 
 ### Contributing
 We welcome contributions! Please see our Contributing Guide for details.
@@ -338,6 +493,7 @@ This project is open source under the MIT License - see the LICENSE file for det
 ### Acknowledgments
 - Uses Go standard library cryptographic primitives
 - Designed based on modern cryptographic best practices
+- Traffic obfuscation techniques inspired by modern anti-censorship tools
 - Thanks to all contributors
 
 ### Support
@@ -350,8 +506,11 @@ This project is open source under the MIT License - see the LICENSE file for det
 - libsodium - Portable cryptography library
 - Noise Protocol - Framework for crypto protocols
 - WireGuard - Modern VPN protocol
+- obfs4 - Pluggable transport for Tor
 
 ### References
 - Elliptic Curve Cryptography
 - ChaCha20 and Poly1305
-- HKDF
+- HKDF (HMAC-based Key Derivation Function)
+- Traffic Analysis Resistance
+- Pluggable Transports

@@ -55,8 +55,8 @@ type ECCConn struct {
 	writeBuffer *sync.Pool
 	headerPool  *sync.Pool
 
-	readMu  sync.Mutex // 单独的读锁
-	writeMu sync.Mutex // 单独的写锁
+	readMu  sync.Mutex
+	writeMu sync.Mutex
 }
 
 // NewConn creates a new ECCConn from an existing network connection.
@@ -278,9 +278,6 @@ func (ec *ECCConn) deriveKeys(sharedSecret []byte, isClient bool) error {
 // It handles the message framing and decryption using the receiving AEAD cipher.
 // The nonce is updated for each message to ensure uniqueness.
 func (ec *ECCConn) Read(b []byte) (int, error) {
-	ec.readMu.Lock()
-	defer ec.readMu.Unlock()
-
 	// Get header from pool and defer return
 	header := ec.headerPool.Get().([]byte)
 	defer ec.headerPool.Put(header)
@@ -318,6 +315,7 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 		}
 	}
 
+	ec.readMu.Lock()
 	// Update nonce and decrypt
 	binary.BigEndian.PutUint64(ec.recvNonce[4:], ec.recvCounter)
 	plaintext, err := ec.recvAEAD.Open(nil, ec.recvNonce, encryptedData, nil)
@@ -330,6 +328,7 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 		return 0, io.ErrShortBuffer
 	}
 	copy(b, plaintext)
+	ec.readMu.Unlock()
 	return len(plaintext), nil
 }
 
@@ -337,13 +336,11 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 // It handles message framing and encryption using the sending AEAD cipher.
 // The nonce is updated for each message to ensure uniqueness.
 func (ec *ECCConn) Write(b []byte) (int, error) {
-	ec.writeMu.Lock()
-	defer ec.writeMu.Unlock()
-
 	if len(b) > maxMessageSize {
 		return 0, errors.New("message too large")
 	}
 
+	ec.writeMu.Lock()
 	// Update nonce and encrypt
 	binary.BigEndian.PutUint64(ec.sendNonce[4:], ec.sendCounter)
 	encrypted := ec.sendAEAD.Seal(nil, ec.sendNonce, b, nil)
@@ -377,6 +374,7 @@ func (ec *ECCConn) Write(b []byte) (int, error) {
 	msgBuf[0] = msgTypeEncrypted
 	binary.BigEndian.PutUint32(msgBuf[1:5], uint32(len(encrypted)))
 	copy(msgBuf[5:], encrypted)
+	ec.writeMu.Unlock()
 
 	_, err := ec.conn.Write(msgBuf)
 	if err != nil {
