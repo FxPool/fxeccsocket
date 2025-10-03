@@ -1,6 +1,6 @@
 # ECC Socket - Secure Communication Library using Elliptic Curve Cryptography
 
-[![Go Version](https://img.shields.io/badge/Go-1.13+-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 A secure network communication library for Go that provides end-to-end encrypted communication using Elliptic Curve Cryptography (ECC) with advanced traffic obfuscation capabilities.
