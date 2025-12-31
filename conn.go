@@ -18,7 +18,6 @@ import (
 const (
 	nonceSize        = 12
 	keySize          = 32
-	maxMessageSize   = 64 * 1024
 	handshakeTimeout = 10 * time.Second
 )
 
@@ -292,9 +291,6 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 	}
 
 	length := binary.BigEndian.Uint32(header[1:5])
-	if length > maxMessageSize*2 { // Allow larger size for obfuscation
-		return 0, errors.New("message too large")
-	}
 
 	// Read encrypted data
 	encryptedData := make([]byte, length)
@@ -336,10 +332,6 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 // It handles message framing and encryption using the sending AEAD cipher.
 // The nonce is updated for each message to ensure uniqueness.
 func (ec *ECCConn) Write(b []byte) (int, error) {
-	if len(b) > maxMessageSize {
-		return 0, errors.New("message too large")
-	}
-
 	ec.writeMu.Lock()
 	// Update nonce and encrypt
 	binary.BigEndian.PutUint64(ec.sendNonce[4:], ec.sendCounter)
