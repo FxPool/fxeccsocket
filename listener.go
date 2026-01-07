@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"net"
+	"time"
 )
 
 // ECCListener represents a listener that accepts ECC-encrypted connections.
@@ -51,6 +52,15 @@ func (el *ECCListener) Addr() net.Addr {
 // It performs a handshake to exchange public keys and derive symmetric encryption keys.
 func Dial(network, address string, config *Config) (*ECCConn, error) {
 	conn, err := net.Dial(network, address)
+	if err != nil {
+		return nil, err
+	}
+	return NewConn(conn, config, true)
+}
+
+// DialTimeout establishes an encrypted connection to the specified network address with timeout.
+func DialTimeout(timeout time.Duration, network, address string, config *Config) (*ECCConn, error) {
+	conn, err := net.DialTimeout(network, address, timeout)
 	if err != nil {
 		return nil, err
 	}
