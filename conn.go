@@ -7,11 +7,12 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"golang.org/x/crypto/chacha20poly1305"
 	"io"
 	"net"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // Constants
@@ -54,6 +55,9 @@ type ECCConn struct {
 	readBuffer  *sync.Pool
 	writeBuffer *sync.Pool
 	headerPool  *sync.Pool
+
+	// Pending data buffer for partial reads
+	pendingData []byte
 
 	readMu  sync.Mutex
 	writeMu sync.Mutex
@@ -277,7 +281,18 @@ func (ec *ECCConn) deriveKeys(sharedSecret []byte, isClient bool) error {
 // Read reads encrypted data from the connection, decrypts it, and returns the plaintext.
 // It handles the message framing and decryption using the receiving AEAD cipher.
 // The nonce is updated for each message to ensure uniqueness.
+// Supports partial reads by buffering unread data.
 func (ec *ECCConn) Read(b []byte) (int, error) {
+	ec.readMu.Lock()
+	defer ec.readMu.Unlock()
+
+	// If there's pending data from a previous read, return it first
+	if len(ec.pendingData) > 0 {
+		n := copy(b, ec.pendingData)
+		ec.pendingData = ec.pendingData[n:]
+		return n, nil
+	}
+
 	// Get header from pool and defer return
 	header := ec.headerPool.Get().([]byte)
 	defer ec.headerPool.Put(header)
@@ -312,7 +327,6 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 		}
 	}
 
-	ec.readMu.Lock()
 	// Update nonce and decrypt
 	binary.BigEndian.PutUint64(ec.recvNonce[4:], ec.recvCounter)
 	plaintext, err := ec.recvAEAD.Open(nil, ec.recvNonce, encryptedData, nil)
@@ -321,12 +335,13 @@ func (ec *ECCConn) Read(b []byte) (int, error) {
 	}
 	ec.recvCounter++
 
-	if len(plaintext) > len(b) {
-		return 0, io.ErrShortBuffer
+	// Copy what we can to the buffer
+	n := copy(b, plaintext)
+	// Store any remaining data for next read
+	if n < len(plaintext) {
+		ec.pendingData = append(ec.pendingData, plaintext[n:]...)
 	}
-	copy(b, plaintext)
-	ec.readMu.Unlock()
-	return len(plaintext), nil
+	return n, nil
 }
 
 // Write encrypts the plaintext data and writes it to the connection.

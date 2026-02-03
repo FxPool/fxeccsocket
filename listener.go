@@ -20,6 +20,7 @@ type Config struct {
 	PublicKey       *ecdsa.PublicKey
 	UseEphemeralKey bool
 	Obfuscation     *ObfuscationConfig // Obfuscation configuration
+	TLS             *TLSConfig         // TLS configuration for advanced obfuscation
 }
 
 // Accept waits for and returns the next encrypted connection to the listener.

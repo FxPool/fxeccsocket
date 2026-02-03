@@ -1,18 +1,18 @@
-# ECC Socket - Secure Communication Library using Elliptic Curve Cryptography
+# ECC Socket - Secure Communication Library with DPI Bypass
 
 [![Go Version](https://img.shields.io/badge/Go-1.17+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A secure network communication library for Go that provides end-to-end encrypted communication using Elliptic Curve Cryptography (ECC) with advanced traffic obfuscation capabilities.
+A secure network communication library for Go that provides end-to-end encrypted communication using Elliptic Curve Cryptography (ECC) with **advanced traffic obfuscation capabilities designed to bypass Deep Packet Inspection (DPI)**.
 
 ## Features
 
 - 🔒 **End-to-End Encryption**: ECDH key exchange with ChaCha20-Poly1305 encryption
-- 🎭 **Traffic Obfuscation**: Multiple obfuscation modes to hide traffic patterns
+- 🎭 **DPI-Resistant Obfuscation**: TLS + WebSocket encapsulation to bypass traffic analysis
 - 🚀 **High Performance**: Modern cryptographic algorithms with low latency
 - 🔑 **Flexible Key Management**: Support for both static and ephemeral keys (forward secrecy)
-- 📜 **Standards Compliant**: PEM format for key storage
-- 🛡️ **Security Hardened**: Replay protection, integrity verification
+- 📜 **Standards Compliant**: PEM format for key storage, RFC 6455 WebSocket frames
+- 🛡️ **Security Hardened**: Replay protection, integrity verification, TLS 1.3 support
 - 🔧 **Easy to Use**: net-like API design for easy integration
 
 ## Installation
@@ -20,496 +20,382 @@ A secure network communication library for Go that provides end-to-end encrypted
 ```bash
 go get github.com/fxpool/fxeccsocket
 ```
+
 ## Quick Start
-## Generating Key Pairs
+
+### Basic Example (No Obfuscation)
+
 ```go
 package main
 
 import (
     "fmt"
-    "github.com/yourusername/fxeccsocket"
+    "github.com/fxpool/fxeccsocket"
+    "log"
 )
 
 func main() {
-    // Generate new ECC key pair
-    privKey, err := fxeccsocket.GenerateKey(nil)
-    if err != nil {
-        panic(err)
-    }
+    // Server
+    go func() {
+        listener, _ := fxeccsocket.Listen("tcp", ":8080", nil)
+        defer listener.Close()
+        
+        conn, _ := listener.Accept()
+        defer conn.Close()
+        
+        buf := make([]byte, 1024)
+        n, _ := conn.Read(buf)
+        fmt.Println("Received:", string(buf[:n]))
+    }()
+
+    // Client
+    conn, _ := fxeccsocket.Dial("tcp", "localhost:8080", nil)
+    defer conn.Close()
     
-    // Encode private key to PEM format
-    privPEM, err := fxeccsocket.EncodePrivateKey(privKey)
-    if err != nil {
-        panic(err)
-    }
-    
-    // Encode public key to PEM format
-    pubPEM, err := fxeccsocket.EncodePublicKey(&privKey.PublicKey)
-    if err != nil {
-        panic(err)
-    }
-    
-    fmt.Println("Private Key:\n", privPEM)
-    fmt.Println("Public Key:\n", pubPEM)
+    conn.Write([]byte("Hello, secure world!"))
 }
 ```
-## Basic Example (No Obfuscation)
+
+## Advanced: DPI-Resistant Obfuscation
+
+For environments with Deep Packet Inspection (such as ISPs in China), use advanced obfuscation mode. This makes your traffic appear as legitimate HTTPS WebSocket communication.
+
+### Obfuscation Levels
+
+| Level | Description | Requirements |
+|-------|-------------|--------------|
+| `ObfuscationLevelBasic` | Padding and header obfuscation | None |
+| `ObfuscationLevelAdvanced` | TLS + WebSocket encapsulation | Domain + TLS cert |
+
+### Obfuscation Modes
+
+| Mode | Description |
+|------|-------------|
+| `ObfuscationNone` | No obfuscation |
+| `ObfuscationHTTP` | HTTP traffic obfuscation |
+| `ObfuscationRandom` | Random padding |
+| `ObfuscationWebSocket` | WebSocket frames (recommended for DPI bypass) |
+
+### Example: Advanced Mode (DPI Bypass)
+
 ```go
 package main
 
 import (
-  "fmt"
-  "github.com/FxPool/fxeccsocket"
-  "io"
-  "log"
-  "net"
-  "time"
-)
-
-// Server example
-func startServer() {
-  listener, err := fxeccsocket.Listen("tcp", ":8080", nil)
-  if err != nil {
-    log.Fatal("Server listen error:", err)
-  }
-  defer listener.Close()
-
-  fmt.Println("ECC Server listening on :8080")
-
-  for {
-    conn, err := listener.Accept()
-    if err != nil {
-      log.Println("Accept error:", err)
-      continue
-    }
-
-    go handleServerConnection(conn)
-  }
-}
-
-func handleServerConnection(conn net.Conn) {
-  defer conn.Close()
-  fmt.Printf("New connection from %s\n", conn.RemoteAddr())
-
-  buffer := make([]byte, 1024)
-  for {
-    n, err := conn.Read(buffer)
-    if err != nil {
-      if err != io.EOF {
-        log.Println("server Read error:", err)
-      }
-      break
-    }
-
-    message := string(buffer[:n])
-    fmt.Printf("Received: %s", message)
-
-    response := fmt.Sprintf("Server response: %s", message)
-    _, err = conn.Write([]byte(response))
-    if err != nil {
-      log.Println("Write error:", err)
-      break
-    }
-  }
-}
-
-// Client example
-func startClient() {
-  time.Sleep(100 * time.Millisecond) // Wait for server to start
-
-  conn, err := fxeccsocket.Dial("tcp", "localhost:8080", nil)
-  if err != nil {
-    log.Fatal("Client dial error:", err)
-  }
-  defer conn.Close()
-
-  fmt.Printf("Connected to %s\n", conn.RemoteAddr())
-
-  // Send multiple messages for testing
-  messages := []string{
-    "Hello, ECC Socket 1!\n",
-    "This is message 2\n",
-    "Final message 3\n",
-  }
-
-  for _, msg := range messages {
-    fmt.Printf("Sending: %s", msg)
-    _, err = conn.Write([]byte(msg))
-    if err != nil {
-      log.Fatal("Write error:", err)
-    }
-
-    buffer := make([]byte, 1024)
-    n, err := conn.Read(buffer)
-    if err != nil {
-      log.Fatal("client Read error:", err)
-    }
-
-    fmt.Printf("Server reply: %s", string(buffer[:n]))
-    time.Sleep(100 * time.Millisecond)
-  }
-}
-
-func main() {
-	
-  // Start the server
-  go startServer()
-  time.Sleep(1 * time.Second)
-
-  // Start the client
-  startClient()
-}
-```
-## Advanced Example (With Traffic Obfuscation)
-```go
-package main
-
-import (
+    "crypto/elliptic"
     "fmt"
-    "github.com/FxPool/fxeccsocket"
+    "github.com/fxpool/fxeccsocket"
     "log"
     "time"
 )
 
 func main() {
-    // Obfuscation configuration for both client and server
-    obfuscationConfig := &fxeccsocket.ObfuscationConfig{
-        Enabled:    true,
-        Mode:       fxeccsocket.ObfuscationHTTPS,
-        Domain:     "api.cloudflare.com",
-        MinDelayMs: 5,
-        MaxDelayMs: 50,
-        MinPacketSize: 128,
-        MaxPacketSize: 1460,
+    // Generate self-signed certificate for your domain
+    certPEM, keyPEM, err := fxeccsocket.GenerateSelfSignedCert([]string{"pool.yoursite.com"})
+    if err != nil {
+        log.Fatal(err)
     }
 
+    // Server configuration
     serverConfig := &fxeccsocket.Config{
-        Curve:       elliptic.P256(),
-        Obfuscation: obfuscationConfig,
+        Curve: elliptic.P256(),
+        TLS: &fxeccsocket.TLSConfig{
+            CertPEM: certPEM,
+            KeyPEM:  keyPEM,
+        },
+        Obfuscation: &fxeccsocket.ObfuscationConfig{
+            Enabled:   true,
+            Level:     fxeccsocket.ObfuscationLevelAdvanced,
+            Mode:      fxeccsocket.ObfuscationWebSocket,
+            Domain:    "pool.yoursite.com",  // Your domain
+            CoverPath: "/ws",                 // WebSocket endpoint
+        },
     }
 
+    // Client configuration
     clientConfig := &fxeccsocket.Config{
-        Curve:       elliptic.P256(),
-        Obfuscation: obfuscationConfig,
+        Curve: elliptic.P256(),
+        TLS: &fxeccsocket.TLSConfig{
+            ServerName: "pool.yoursite.com",
+            SkipVerify: true,  // For self-signed certs
+        },
+        Obfuscation: &fxeccsocket.ObfuscationConfig{
+            Enabled:   true,
+            Level:     fxeccsocket.ObfuscationLevelAdvanced,
+            Mode:      fxeccsocket.ObfuscationWebSocket,
+            Domain:    "pool.yoursite.com",
+        },
     }
 
-    // Start obfuscated server
+    // Start server
     go func() {
-        listener, err := fxeccsocket.Listen("tcp", ":8081", serverConfig)
+        listener, err := fxeccsocket.Listen("tcp", ":443", serverConfig)
         if err != nil {
-            log.Fatal("Server listen error:", err)
+            log.Fatal(err)
         }
         defer listener.Close()
-
-        fmt.Println("Obfuscated ECC Server listening on :8081")
-
-        conn, err := listener.Accept()
-        if err != nil {
-            log.Fatal("Accept error:", err)
+        
+        fmt.Println("DPI-resistant server listening on :443")
+        
+        for {
+            conn, err := listener.Accept()
+            if err != nil {
+                continue
+            }
+            go handleConnection(conn)
         }
-        defer conn.Close()
-
-        // Handle connection...
     }()
 
-    time.Sleep(1 * time.Second)
+    time.Sleep(time.Second)
 
-    // Connect with obfuscated client
-    conn, err := fxeccsocket.Dial("tcp", "localhost:8081", clientConfig)
+    // Connect with client
+    conn, err := fxeccsocket.Dial("tcp", "localhost:443", clientConfig)
     if err != nil {
-        log.Fatal("Client dial error:", err)
+        log.Fatal(err)
     }
     defer conn.Close()
-
-    fmt.Println("Connected with traffic obfuscation enabled")
+    
+    fmt.Println("Connected with DPI-resistant obfuscation")
 }
 ```
-## Traffic Obfuscation
-### Obfuscation Modes
-The library provides multiple traffic obfuscation modes to hide encryption patterns:
-1. HTTP Obfuscation
-- Masks traffic as standard HTTP requests/responses
-- Uses proper HTTP headers and chunked encoding
-- Simulates real web traffic patterns
-2. HTTPS Obfuscation
-- Similar to HTTP but with TLS-like characteristics
-- More convincing for environments expecting encrypted web traffic
-- Uses realistic domain names and user agents
-3. Random Padding Obfuscation
-- Adds random padding to disrupt packet size analysis
-- Randomizes packet timing with configurable delays
-- Makes traffic analysis more difficult
-## Obfuscation Configuration
-```go
-type ObfuscationConfig struct {
-    Enabled       bool            // Enable/disable obfuscation
-    Mode          ObfuscationMode // Obfuscation mode (HTTP/HTTPS/Random)
-    Domain        string          // Domain for HTTP/HTTPS obfuscation
-    MinDelayMs    int             // Minimum delay between packets (ms)
-    MaxDelayMs    int             // Maximum delay between packets (ms)
-    MinPacketSize int             // Minimum packet size for padding
-    MaxPacketSize int             // Maximum packet size for padding
-}
-```
-## Usage Notes
-- Symmetric Configuration: Client and server must use identical obfuscation settings
-- Performance: Obfuscation adds minimal overhead (5-15% depending on mode)
-- Stealth: Effectively hides traffic from deep packet inspection (DPI) systems
 
-# API Documentation
-## Types
-## ECCConn
-## Encrypted connection type implementing net.Conn interface.
+## Configuration Validation
+
+The library validates your configuration and provides helpful error messages:
 
 ```go
-type ECCConn struct {
-    // unexported fields
+// Validate config before use
+if err := fxeccsocket.ValidateConfig(config, isServer); err != nil {
+    log.Fatal(err)
 }
-```
-### Methods:
-- Read([]byte) (int, error) - Read and decrypt data
-- Write([]byte) (int, error) - Encrypt and write data
-- Close() error - Close the connection
-- GetPublicKey() *ecdsa.PublicKey - Get local public key
-- Standard net.Conn methods: LocalAddr(), RemoteAddr(), SetDeadline(), etc.
-### ECCListener
-### Encrypted connection listener.
-```go
-type ECCListener struct {
-    // unexported fields
-}
-```
-### Methods:
-- `Accept() (net.Conn, error)` - Accept new connection
-- `Close() error` - Close listener
-- `Addr() net.Addr` - Get listen address
 
-### Config
-### Configuration parameters structure.
+// Or with verbose output
+fxeccsocket.ValidateAndExplain(config, isServer, true)
+```
+
+## Important Security Notes
+
+### ⚠️ Domain Requirements
+
+When using `ObfuscationLevelAdvanced`:
+
+1. **Use a domain you control** (e.g., `pool.yoursite.com`)
+2. **Do NOT use** `google.com`, `cloudflare.com`, or similar major domains
+3. DPI systems perform **active probing** - they will verify if your server is the real domain
+4. **Domain must resolve to your server IP** via DNS A record
+
+### 🔐 TLS Certificate Configuration
+
+You have two options for certificates. **Let's Encrypt is strongly recommended**.
+
+#### Option 1: Let's Encrypt Certificate (Recommended ⭐)
+
+| Advantage | Description |
+|-----------|-------------|
+| **Trusted CA** | Browser and DPI systems recognize it as legitimate |
+| **Free** | No cost, auto-renews every 90 days |
+| **No SkipVerify** | Client doesn't need to skip verification |
+| **Best Stealth** | Indistinguishable from normal HTTPS |
+
+```bash
+# Install certbot
+sudo apt install certbot  # Ubuntu/Debian
+sudo yum install certbot  # CentOS/RHEL
+
+# Get certificate (domain must resolve to this server)
+sudo certbot certonly --standalone -d pool.yoursite.com
+
+# Certificate files location:
+# /etc/letsencrypt/live/pool.yoursite.com/fullchain.pem  (certificate)
+# /etc/letsencrypt/live/pool.yoursite.com/privkey.pem   (private key)
+```
+
 ```go
-type Config struct {
-    Curve           elliptic.Curve      // Elliptic curve (default P-256)
-    PrivateKey      *ecdsa.PrivateKey   // Private key (optional)
-    PublicKey       *ecdsa.PublicKey    // Public key (optional)
-    UseEphemeralKey bool               // Use ephemeral keys (forward secrecy)
-    Obfuscation     *ObfuscationConfig  // Traffic obfuscation settings
+// Server: Load Let's Encrypt certificate
+certPEM, _ := os.ReadFile("/etc/letsencrypt/live/pool.yoursite.com/fullchain.pem")
+keyPEM, _ := os.ReadFile("/etc/letsencrypt/live/pool.yoursite.com/privkey.pem")
+
+serverConfig := &fxeccsocket.Config{
+    TLS: &fxeccsocket.TLSConfig{
+        CertPEM: string(certPEM),
+        KeyPEM:  string(keyPEM),
+    },
+    Obfuscation: &fxeccsocket.ObfuscationConfig{
+        Enabled: true,
+        Level:   fxeccsocket.ObfuscationLevelAdvanced,
+        Mode:    fxeccsocket.ObfuscationWebSocket,
+        Domain:  "pool.yoursite.com",
+    },
+}
+
+// Client: No need to skip verification!
+clientConfig := &fxeccsocket.Config{
+    TLS: &fxeccsocket.TLSConfig{
+        ServerName: "pool.yoursite.com",
+        SkipVerify: false,  // Real cert, no need to skip
+    },
+    // ...
 }
 ```
-#### ObfuscationConfig
-#### Traffic obfuscation configuration.
+
+#### Option 2: Self-Signed Certificate
+
+| Consideration | Description |
+|---------------|-------------|
+| **Quick Setup** | No domain verification needed |
+| **Requires SkipVerify** | Client must set `SkipVerify: true` |
+| **Less Stealthy** | DPI may flag non-CA certificates |
+
 ```go
-type ObfuscationConfig struct {
-    Enabled       bool            // Enable traffic obfuscation
-    Mode          ObfuscationMode // Obfuscation mode
-    Domain        string          // Domain for HTTP/HTTPS obfuscation
-    MinDelayMs    int             // Minimum packet delay (milliseconds)
-    MaxDelayMs    int             // Maximum packet delay (milliseconds)
-    MinPacketSize int             // Minimum packet size
-    MaxPacketSize int             // Maximum packet size
+// Generate self-signed certificate
+certPEM, keyPEM, err := fxeccsocket.GenerateSelfSignedCert([]string{"pool.yoursite.com"})
+
+// Client MUST skip verification
+clientConfig.TLS.SkipVerify = true
+```
+
+### 📋 Complete Setup Checklist
+
+1. ✅ Buy a domain (~$5-10/year from Namecheap, Cloudflare, etc.)
+2. ✅ Add DNS A record: `pool.yoursite.com` → `your.server.ip`
+3. ✅ Get Let's Encrypt certificate with `certbot`
+4. ✅ Configure Nginx as reverse proxy (optional but recommended)
+5. ✅ Set up a cover website at `/` for active probing defense
+
+### 🛡️ Nginx Reverse Proxy (Optional)
+
+For best stealth, put a normal website in front:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name pool.yoursite.com;
+    
+    ssl_certificate /etc/letsencrypt/live/pool.yoursite.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/pool.yoursite.com/privkey.pem;
+    
+    # Normal website (for cover - defeats active probing)
+    location / {
+        root /var/www/html;
+        index index.html;
+    }
+    
+    # WebSocket endpoint (your actual service)
+    location /ws {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
 }
 ```
-#### Obfuscation Modes
-```go
-const (
-    ObfuscationNone    ObfuscationMode = iota // No obfuscation
-    ObfuscationHTTP                           // HTTP traffic obfuscation
-    ObfuscationHTTPS                          // HTTPS traffic obfuscation  
-    ObfuscationRandom                         // Random padding obfuscation
-)
-```
-### Functions
+
+## API Reference
+
 ### Key Management
 
 ```go
-func GenerateKey(curve elliptic.Curve) (*ecdsa.PrivateKey, error)
-func EncodePrivateKey(key *ecdsa.PrivateKey) (string, error)
-func DecodePrivateKey(pemData string) (*ecdsa.PrivateKey, error)
-func EncodePublicKey(key *ecdsa.PublicKey) (string, error)
-func DecodePublicKey(pemData string) (*ecdsa.PublicKey, error)
+// Generate key pair
+privKey, err := fxeccsocket.GenerateKey(elliptic.P256())
+
+// Encode/decode keys
+privPEM, _ := fxeccsocket.EncodePrivateKey(privKey)
+pubPEM, _ := fxeccsocket.EncodePublicKey(&privKey.PublicKey)
+
+privKey, _ := fxeccsocket.DecodePrivateKey(privPEM)
+pubKey, _ := fxeccsocket.DecodePublicKey(pubPEM)
 ```
+
 ### Connection Management
+
 ```go
-func Dial(network, address string, config *Config) (*ECCConn, error)
-func Listen(network, address string, config *Config) (*ECCListener, error)
-func NewConn(conn net.Conn, config *Config, isClient bool) (*ECCConn, error)
+// Client connection
+conn, err := fxeccsocket.Dial("tcp", "host:port", config)
+conn, err := fxeccsocket.DialTimeout(5*time.Second, "tcp", "host:port", config)
+
+// Server listener
+listener, err := fxeccsocket.Listen("tcp", ":port", config)
+conn, err := listener.Accept()
 ```
+
+### TLS Certificate Generation
+
+```go
+// RSA certificate
+certPEM, keyPEM, err := fxeccsocket.GenerateSelfSignedCert([]string{"domain.com", "192.168.1.1"})
+
+// ECDSA certificate (better performance)
+certPEM, keyPEM, err := fxeccsocket.GenerateSelfSignedCertECDSA([]string{"domain.com"})
+```
+
+## Performance
+
+| Metric | Value |
+|--------|-------|
+| Encryption throughput | ~800 Mbps |
+| Handshake time | ~2.5 ms |
+| Memory per connection | ~4 KB |
+| Obfuscation overhead | 5-15% |
+
 ## Protocol Details
-## Handshake Protocol
-1. Key Exchange: ECDH Elliptic Curve Diffie-Hellman key exchange
-2. Key Derivation: HKDF for symmetric key derivation from shared secret
-3. Bidirectional Authentication: Different key contexts for client and server
-4. Traffic Obfuscation: Optional masking of encrypted traffic
+
+### Encryption Stack
+
+1. **Key Exchange**: ECDH (P-256/P-384/P-521)
+2. **Symmetric Encryption**: ChaCha20-Poly1305
+3. **Key Derivation**: HKDF-SHA256
+4. **TLS Layer**: TLS 1.2/1.3 (advanced mode)
 
 ### Message Format
-### Public Key Message
-
-```
-+------+--------+------------+
-| 0x01 | Length | Public Key |
-+------+--------+------------+
-| 1B   | 2B     | Variable   |
-+------+--------+------------+
-```
-
-### Encrypted Data Message
 
 ```
 +------+-----------+----------------+
-| 0x02 | Length    | Encrypted Data |
+| Type | Length    | Encrypted Data |
 +------+-----------+----------------+
 | 1B   | 4B        | Variable       |
 +------+-----------+----------------+
 ```
 
-## Obfuscated Message Format
-### HTTP Obfuscation Format
-```text
-HTTP Headers + Chunked Encoding + Encrypted Data
-```
+## Future Roadmap
 
-## Random Padding Format
-```text
-Encrypted Data + Random Padding (variable length)
-```
+### v2.0 - HTTP/3 (QUIC) Support
 
-## Key Derivation
+When current TLS + WebSocket obfuscation is no longer sufficient, upgrade to HTTP/3:
 
-```
-client_send_key = HKDF(shared_secret, salt, "client_key")
-server_send_key = HKDF(shared_secret, salt, "server_key")
-```
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **QUIC Protocol** | UDP-based transport, better for high-latency networks | High |
+| **HTTP/3 Disguise** | Traffic appears as standard HTTP/3 | High |
+| **0-RTT Connection** | Faster connection establishment | Medium |
+| **Brutal Congestion Control** | Better performance on lossy networks | Medium |
 
-### Security Considerations
-### Recommended Configuration
-```go
-// For optimal security, recommended to use:
-config := &fxeccsocket.Config{
-    Curve: elliptic.P256(),    // Or more secure curves
-    UseEphemeralKey: true,     // Enable forward secrecy
-    Obfuscation: &fxeccsocket.ObfuscationConfig{
-    Enabled:    true,
-    Mode:       fxeccsocket.ObfuscationHTTPS,
-    Domain:     "cdn.google.com",
-    MinDelayMs: 10,
-    MaxDelayMs: 100,
-    },
-}
-```
+**Implementation Notes:**
+- Requires `quic-go` library (~50MB dependency)
+- Need to handle UDP blocking in some networks
+- Consider Hysteria2 protocol as reference
 
-### Security Features
-- Forward Secrecy: When UseEphemeralKey is enabled, each connection uses different ephemeral keys
-- Replay Protection: Incrementing counter-based nonce prevents replay attacks
-- Integrity Verification: Poly1305 authentication tags ensure data integrity
-- Key Separation: Different encryption keys for client and server directions
-- Traffic Obfuscation: Hides encryption patterns from network analysis
+**When to Upgrade:**
+- If current WebSocket mode gets blocked
+- If users report UDP works better in their network
+- If 0-RTT fast reconnection is needed
 
-### Obfuscation Security Benefits
-- Pattern Hiding: Disrupts packet size and timing analysis
-- Protocol Mimicry: Appears as legitimate web traffic to DPI systems
-- Plausible Deniability: Traffic resembles common internet protocols
+---
 
-### Performance Considerations
-- Uses ChaCha20-Poly1305 instead of AES-GCM for better performance on devices without AES hardware acceleration
-- Single connection throughput can reach Gbps levels
-- Low memory footprint, suitable for high-concurrency scenarios
-- Low memory footprint, suitable for high-concurrency scenarios
+## Related Projects
 
-### Obfuscation Performance Impact
-- HTTP/HTTPS Mode: ~10-15% overhead due to header processing
-- Random Padding: ~5-10% overhead depending on padding size
-- Network Delays: Configurable delays add latency but improve stealth
+- [obfs4](https://github.com/Yawning/obfs4) - Pluggable transport for Tor
+- [V2Ray](https://github.com/v2fly/v2ray-core) - Platform for building proxies
+- [WireGuard](https://www.wireguard.com/) - Modern VPN protocol
+- [Hysteria2](https://hysteria.network/) - QUIC-based proxy protocol (reference for HTTP/3)
 
-### Limitations
-- Maximum message size: 64KB (configurable via maxMessageSize constant)
-- Currently only supports TCP protocol
-- Requires Go 1.16+ version
-- Obfuscation requires symmetric client/server configuration
+## License
 
-### Troubleshooting
-### Common Errors
+MIT License - see [LICENSE](LICENSE)
 
-1. "unexpected message type"
-
-- - Check client and server version compatibility
-- - Verify network connection isn't being interfered with
-- - Check network connection isn't being interfered with
-
-2. "public key too large"
-
-- - Check if the elliptic curve used is reasonable
-- - Verify public key serialization is correct
-
-3. Authentication failures
-
-- - Check system clock synchronization
-- - Verify keys are loaded correctly
-
-4. Obfuscation mismatches
-
-- - Ensure client and server use identical ObfuscationConfig
-- - Verify Enabled flag and Mode are the same on both ends
-
-### Debug Mode
-Add verbose logging to debug handshake process.
-
-### Benchmarks
-Basic performance metrics (on Intel i7-8700K):
-
-```
-Encryption throughput: ~800 Mbps
-Handshake time: ~2.5 ms
-Memory per connection: ~4 KB
-Obfuscation overhead: 5-15% (depending on mode)
-```
-
-### Examples Directory
-- Check the `examples/` directory for additional usage examples
-- Check the `test/` directory for additional usage examples
-
-### Contributing
-We welcome contributions! Please see our Contributing Guide for details.
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Commit your changes
 4. Push to the branch
 5. Create a Pull Request
-
-### Development Setup
-```base
-git clone https://github.com/fxpool/fxeccsocket.git
-cd fxeccsocket
-go test ./...
-```
-### Running Tests
-```base
-go test -v -race ./...
-```
-
-### License
-This project is open source under the MIT License - see the LICENSE file for details.
-
-### Acknowledgments
-- Uses Go standard library cryptographic primitives
-- Designed based on modern cryptographic best practices
-- Traffic obfuscation techniques inspired by modern anti-censorship tools
-- Thanks to all contributors
-
-### Support
-- If you encounter issues or have questions:
-- Check existing issues
-- Create a new issue with detailed description
-- Contact maintainers
-
-### Related Projects
-- libsodium - Portable cryptography library
-- Noise Protocol - Framework for crypto protocols
-- WireGuard - Modern VPN protocol
-- obfs4 - Pluggable transport for Tor
-
-### References
-- Elliptic Curve Cryptography
-- ChaCha20 and Poly1305
-- HKDF (HMAC-based Key Derivation Function)
-- Traffic Analysis Resistance
-- Pluggable Transports

@@ -2,6 +2,7 @@ package fxeccsocket
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -14,21 +15,39 @@ import (
 type ObfuscationMode int
 
 const (
-	ObfuscationNone   ObfuscationMode = iota // No obfuscation
-	ObfuscationHTTP                          // HTTP traffic obfuscation
-	ObfuscationHTTPS                         // HTTPS traffic obfuscation
-	ObfuscationRandom                        // Random padding obfuscation
+	ObfuscationNone      ObfuscationMode = iota // No obfuscation
+	ObfuscationHTTP                             // HTTP traffic obfuscation
+	ObfuscationHTTPS                            // HTTPS traffic obfuscation (legacy, same as HTTP)
+	ObfuscationRandom                           // Random padding obfuscation
+	ObfuscationWebSocket                        // WebSocket frame encapsulation (recommended for DPI bypass)
 )
 
 // ObfuscationConfig holds configuration for traffic obfuscation
 type ObfuscationConfig struct {
-	Enabled       bool            // Whether obfuscation is enabled
-	Mode          ObfuscationMode // Obfuscation mode to use
-	Domain        string          // Domain for HTTP/HTTPS obfuscation
-	MinDelayMs    int             // Minimum delay in milliseconds
-	MaxDelayMs    int             // Maximum delay in milliseconds
-	MinPacketSize int             // Minimum packet size for padding
-	MaxPacketSize int             // Maximum packet size for padding
+	Enabled bool             // Whether obfuscation is enabled
+	Level   ObfuscationLevel // Obfuscation level (Basic or Advanced)
+	Mode    ObfuscationMode  // Obfuscation mode to use
+
+	// ===== Basic Mode Parameters =====
+	MinPacketSize int // Minimum packet size for padding
+	MaxPacketSize int // Maximum packet size for padding
+	MinDelayMs    int // Minimum delay in milliseconds
+	MaxDelayMs    int // Maximum delay in milliseconds
+
+	// ===== Advanced Mode Parameters =====
+	// The following are REQUIRED when Level=ObfuscationLevelAdvanced
+
+	// Domain is the domain you control.
+	// IMPORTANT: DPI systems inspect SNI. This domain appears in TLS handshake.
+	// Example: "pool.yoursite.com"
+	// WARNING: Do NOT use google.com or similar - active probing will detect this.
+	Domain string
+
+	// CoverPath is the WebSocket endpoint path.
+	// Example: "/ws"
+	// Your server should serve a normal website on / and forward /ws to your pool.
+	// This helps defeat active probing by GFW.
+	CoverPath string
 }
 
 // obfuscator interface defines the methods for different obfuscation strategies
@@ -65,6 +84,8 @@ func createObfuscator(mode ObfuscationMode, config *ObfuscationConfig, isClient 
 		return newHTTPObfuscator(config, isClient)
 	case ObfuscationRandom:
 		return newRandomObfuscator(config)
+	case ObfuscationWebSocket:
+		return newWebSocketObfuscator(config, isClient)
 	default:
 		return &noopObfuscator{}
 	}
@@ -248,50 +269,50 @@ func newRandomObfuscator(config *ObfuscationConfig) *RandomObfuscator {
 	}
 }
 
-// obfuscate adds random padding to data
+// obfuscate adds random padding to data with a length header for recovery.
+// Format: [2-byte original length (big-endian)][original data][random padding]
 func (r *RandomObfuscator) obfuscate(data []byte) ([]byte, error) {
 	targetSize := r.minSize
 	if r.maxSize > r.minSize {
 		targetSize = r.minSize + rand.Intn(r.maxSize-r.minSize+1)
 	}
 
-	if len(data) >= targetSize {
-		return data, nil
+	// Ensure we have at least 2 bytes for length header + original data
+	minRequired := len(data) + 2
+	if targetSize < minRequired {
+		targetSize = minRequired
 	}
 
-	paddingSize := targetSize - len(data)
-
-	// Get padding buffer from pool
-	padding := r.paddingPool.Get().([]byte)
-	defer r.paddingPool.Put(padding)
-
-	if len(padding) < paddingSize {
-		padding = make([]byte, paddingSize)
-	} else {
-		padding = padding[:paddingSize]
+	// Check data length fits in uint16
+	if len(data) > 65535 {
+		return nil, fmt.Errorf("data too large: %d bytes (max 65535)", len(data))
 	}
 
-	rand.Read(padding)
-
-	// Insert padding at random position for better obfuscation
-	insertPos := rand.Intn(len(data) + 1)
-	result := make([]byte, 0, targetSize)
-	result = append(result, data[:insertPos]...)
-	result = append(result, padding...)
-	result = append(result, data[insertPos:]...)
+	result := make([]byte, targetSize)
+	// Write original data length (big-endian)
+	binary.BigEndian.PutUint16(result[:2], uint16(len(data)))
+	// Copy original data
+	copy(result[2:], data)
+	// Fill remaining bytes with random padding
+	if paddingLen := targetSize - 2 - len(data); paddingLen > 0 {
+		rand.Read(result[2+len(data):])
+	}
 
 	return result, nil
 }
 
-// deobfuscate removes random padding from data
+// deobfuscate removes random padding and extracts original data using length header.
 func (r *RandomObfuscator) deobfuscate(data []byte) ([]byte, error) {
-	// Simple approach: assume original data is at the beginning
-	// In practice, you might want to use a more sophisticated approach
-	if len(data) <= maxMessageSize {
-		return data, nil
+	if len(data) < 2 {
+		return nil, fmt.Errorf("data too short: need at least 2 bytes for length header")
 	}
-	// Return first maxMessageSize bytes (simplified)
-	return data[:maxMessageSize], nil
+
+	originalLen := binary.BigEndian.Uint16(data[:2])
+	if int(originalLen) > len(data)-2 {
+		return nil, fmt.Errorf("invalid length header: claims %d bytes but only %d available", originalLen, len(data)-2)
+	}
+
+	return data[2 : 2+originalLen], nil
 }
 
 // noopObfuscator provides a no-operation obfuscator for when obfuscation is disabled
