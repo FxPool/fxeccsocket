@@ -1,4 +1,4 @@
-package fxeccsocket
+package umbra
 
 import (
 	"fmt"

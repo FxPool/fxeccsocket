@@ -1,4 +1,4 @@
-module github.com/fxpool/fxeccsocket
+module github.com/fxpool/umbra
 
 go 1.17
 

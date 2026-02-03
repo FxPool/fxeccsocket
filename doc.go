@@ -1,4 +1,4 @@
-// Package fxeccsocket provides encrypted TCP connections using Elliptic Curve Cryptography
+// Package umbra provides encrypted TCP connections using Elliptic Curve Cryptography
 // for key exchange and ChaCha20-Poly1305 for authenticated encryption.
 //
 // The package enables secure communication over TCP with forward secrecy support
@@ -17,11 +17,11 @@
 // # Basic Usage
 //
 //	// Server side
-//	listener, _ := fxeccsocket.Listen("tcp", ":8080", nil)
+//	listener, _ := umbra.Listen("tcp", ":8080", nil)
 //	conn, _ := listener.Accept()
 //
 //	// Client side
-//	conn, _ := fxeccsocket.Dial("tcp", "localhost:8080", nil)
+//	conn, _ := umbra.Dial("tcp", "localhost:8080", nil)
 //
 // # Advanced Usage with DPI Bypass
 //
@@ -29,33 +29,33 @@
 // use the advanced obfuscation mode:
 //
 //	// Generate self-signed certificate
-//	certPEM, keyPEM, _ := fxeccsocket.GenerateSelfSignedCert([]string{"pool.yoursite.com"})
+//	certPEM, keyPEM, _ := umbra.GenerateSelfSignedCert([]string{"pool.yoursite.com"})
 //
 //	// Server config
-//	serverConfig := &fxeccsocket.Config{
-//	    TLS: &fxeccsocket.TLSConfig{
+//	serverConfig := &umbra.Config{
+//	    TLS: &umbra.TLSConfig{
 //	        CertPEM: certPEM,
 //	        KeyPEM:  keyPEM,
 //	    },
-//	    Obfuscation: &fxeccsocket.ObfuscationConfig{
+//	    Obfuscation: &umbra.ObfuscationConfig{
 //	        Enabled:   true,
-//	        Level:     fxeccsocket.ObfuscationLevelAdvanced,
-//	        Mode:      fxeccsocket.ObfuscationWebSocket,
+//	        Level:     umbra.ObfuscationLevelAdvanced,
+//	        Mode:      umbra.ObfuscationWebSocket,
 //	        Domain:    "pool.yoursite.com",
 //	        CoverPath: "/ws",
 //	    },
 //	}
 //
 //	// Client config
-//	clientConfig := &fxeccsocket.Config{
-//	    TLS: &fxeccsocket.TLSConfig{
+//	clientConfig := &umbra.Config{
+//	    TLS: &umbra.TLSConfig{
 //	        ServerName: "pool.yoursite.com",
 //	        SkipVerify: true,
 //	    },
-//	    Obfuscation: &fxeccsocket.ObfuscationConfig{
+//	    Obfuscation: &umbra.ObfuscationConfig{
 //	        Enabled:   true,
-//	        Level:     fxeccsocket.ObfuscationLevelAdvanced,
-//	        Mode:      fxeccsocket.ObfuscationWebSocket,
+//	        Level:     umbra.ObfuscationLevelAdvanced,
+//	        Mode:      umbra.ObfuscationWebSocket,
 //	        Domain:    "pool.yoursite.com",
 //	    },
 //	}
@@ -89,4 +89,4 @@
 //
 // Using domains like google.com or cloudflare.com will be detected by active probing
 // and may result in IP blocking.
-package fxeccsocket
+package umbra

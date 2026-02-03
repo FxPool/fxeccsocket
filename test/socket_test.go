@@ -2,17 +2,18 @@ package main
 
 import (
 	"fmt"
-	"github.com/fxpool/fxeccsocket"
 	"io"
 	"log"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/fxpool/umbra"
 )
 
 // Server example
 func startServer() {
-	listener, err := fxeccsocket.Listen("tcp", ":8080", nil)
+	listener, err := umbra.Listen("tcp", ":8080", nil)
 	if err != nil {
 		log.Fatal("Server listen error:", err)
 	}
@@ -60,7 +61,7 @@ func handleServerConnection(conn net.Conn) {
 // Client example
 func startClient() {
 	time.Sleep(100 * time.Millisecond) // Wait for server to start
-	conn, err := fxeccsocket.Dial("tcp", "localhost:8080", nil)
+	conn, err := umbra.Dial("tcp", "localhost:8080", nil)
 	if err != nil {
 		log.Fatal("Client dial error:", err)
 	}

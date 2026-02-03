@@ -3,10 +3,11 @@ package examples
 import (
 	"crypto/elliptic"
 	"fmt"
-	"github.com/fxpool/fxeccsocket"
 	"log"
 	"net"
 	"time"
+
+	"github.com/fxpool/umbra"
 )
 
 // Example 1: Using fixed key pairs (server and client use pre-generated keys)
@@ -14,15 +15,15 @@ func ExampleWithFixedKeys() {
 	fmt.Println("=== Example 1: Using Fixed Key Pairs ===")
 
 	// Generate fixed key pairs (should be pre-generated and saved in real applications)
-	serverPrivKey, _ := fxeccsocket.GenerateKey(nil)
-	clientPrivKey, _ := fxeccsocket.GenerateKey(nil)
+	serverPrivKey, _ := umbra.GenerateKey(nil)
+	clientPrivKey, _ := umbra.GenerateKey(nil)
 
 	// Get public keys
 	serverPubKey := &serverPrivKey.PublicKey
 	clientPubKey := &clientPrivKey.PublicKey
 
 	// Server configuration
-	serverConfig := &fxeccsocket.Config{
+	serverConfig := &umbra.Config{
 		Curve:           elliptic.P256(),
 		PrivateKey:      serverPrivKey,
 		PublicKey:       clientPubKey, // Optional: pre-set client public key for verification
@@ -30,7 +31,7 @@ func ExampleWithFixedKeys() {
 	}
 
 	// Client configuration
-	clientConfig := &fxeccsocket.Config{
+	clientConfig := &umbra.Config{
 		Curve:           elliptic.P256(),
 		PrivateKey:      clientPrivKey,
 		PublicKey:       serverPubKey, // Pre-set server public key
@@ -39,7 +40,7 @@ func ExampleWithFixedKeys() {
 
 	// Start server
 	go func() {
-		listener, err := fxeccsocket.Listen("tcp", ":8081", serverConfig)
+		listener, err := umbra.Listen("tcp", ":8081", serverConfig)
 		if err != nil {
 			log.Fatal("Server listen error:", err)
 		}
@@ -65,7 +66,7 @@ func ExampleWithFixedKeys() {
 	time.Sleep(100 * time.Millisecond)
 
 	// Start client
-	conn, err := fxeccsocket.Dial("tcp", "localhost:8081", clientConfig)
+	conn, err := umbra.Dial("tcp", "localhost:8081", clientConfig)
 	if err != nil {
 		log.Fatal("Client dial error:", err)
 	}
@@ -86,13 +87,13 @@ func ExampleWithEphemeralKeys() {
 	fmt.Println("\n=== Example 2: Using Ephemeral Keys ===")
 
 	// Server configuration - use ephemeral keys
-	serverConfig := &fxeccsocket.Config{
+	serverConfig := &umbra.Config{
 		Curve:           elliptic.P384(), // Use stronger curve
 		UseEphemeralKey: true,            // Force use of ephemeral keys
 	}
 
 	go func() {
-		listener, err := fxeccsocket.Listen("tcp", ":8082", serverConfig)
+		listener, err := umbra.Listen("tcp", ":8082", serverConfig)
 		if err != nil {
 			log.Fatal("Server listen error:", err)
 		}
@@ -106,7 +107,7 @@ func ExampleWithEphemeralKeys() {
 		defer conn.Close()
 
 		// Display server's ephemeral public key
-		eccConn := conn.(*fxeccsocket.ECCConn)
+		eccConn := conn.(*umbra.ECCConn)
 		fmt.Printf("Server ephemeral public key: %x...\n",
 			eccConn.GetPublicKey().X.Bytes()[:10])
 
@@ -123,12 +124,12 @@ func ExampleWithEphemeralKeys() {
 	time.Sleep(100 * time.Millisecond)
 
 	// Client configuration - also use ephemeral keys
-	clientConfig := &fxeccsocket.Config{
+	clientConfig := &umbra.Config{
 		Curve:           elliptic.P384(),
 		UseEphemeralKey: true,
 	}
 
-	conn, err := fxeccsocket.Dial("tcp", "localhost:8082", clientConfig)
+	conn, err := umbra.Dial("tcp", "localhost:8082", clientConfig)
 	if err != nil {
 		log.Fatal("Client dial error:", err)
 	}
@@ -162,14 +163,14 @@ func ExampleWithDifferentCurves() {
 	for i, curve := range curves {
 		port := 8090 + i
 
-		config := &fxeccsocket.Config{
+		config := &umbra.Config{
 			Curve:      curve,
 			PrivateKey: nil, // Use ephemeral keys
 		}
 
 		// Server
 		go func(curve elliptic.Curve, port int) {
-			listener, err := fxeccsocket.Listen("tcp", fmt.Sprintf(":%d", port), config)
+			listener, err := umbra.Listen("tcp", fmt.Sprintf(":%d", port), config)
 			if err != nil {
 				log.Printf("Curve server %d failed to start: %v", port, err)
 				return
@@ -192,7 +193,7 @@ func ExampleWithDifferentCurves() {
 		time.Sleep(50 * time.Millisecond)
 
 		// Client
-		conn, err := fxeccsocket.Dial("tcp", fmt.Sprintf("localhost:%d", port), config)
+		conn, err := umbra.Dial("tcp", fmt.Sprintf("localhost:%d", port), config)
 		if err != nil {
 			log.Printf("Curve client %d connection failed: %v", port, err)
 			continue
@@ -215,34 +216,34 @@ func ExampleWithPEMFiles() {
 	fmt.Println("\n=== Example 4: PEM Key File Usage ===")
 
 	// Generate and save key pair
-	privKey, _ := fxeccsocket.GenerateKey(nil)
+	privKey, _ := umbra.GenerateKey(nil)
 
 	// Encode to PEM
-	privKeyPEM, _ := fxeccsocket.EncodePrivateKey(privKey)
-	pubKeyPEM, _ := fxeccsocket.EncodePublicKey(&privKey.PublicKey)
+	privKeyPEM, _ := umbra.EncodePrivateKey(privKey)
+	pubKeyPEM, _ := umbra.EncodePublicKey(&privKey.PublicKey)
 
 	fmt.Printf("Private Key PEM:\n%s\n", privKeyPEM)
 	fmt.Printf("Public Key PEM:\n%s\n", pubKeyPEM)
 
 	// Decode from PEM
-	decodedPrivKey, err := fxeccsocket.DecodePrivateKey(privKeyPEM)
+	decodedPrivKey, err := umbra.DecodePrivateKey(privKeyPEM)
 	if err != nil {
 		log.Fatal("Private key decode error:", err)
 	}
 
-	decodedPubKey, err := fxeccsocket.DecodePublicKey(pubKeyPEM)
+	decodedPubKey, err := umbra.DecodePublicKey(pubKeyPEM)
 	if err != nil {
 		log.Fatal("Public key decode error:", err)
 	}
 
 	// Create configuration using decoded keys
-	config := &fxeccsocket.Config{
+	config := &umbra.Config{
 		PrivateKey: decodedPrivKey,
 		PublicKey:  decodedPubKey,
 	}
 
 	go func() {
-		listener, err := fxeccsocket.Listen("tcp", ":8083", config)
+		listener, err := umbra.Listen("tcp", ":8083", config)
 		if err != nil {
 			log.Fatal("PEM server error:", err)
 		}
@@ -263,7 +264,7 @@ func ExampleWithPEMFiles() {
 
 	time.Sleep(100 * time.Millisecond)
 
-	conn, err := fxeccsocket.Dial("tcp", "localhost:8083", config)
+	conn, err := umbra.Dial("tcp", "localhost:8083", config)
 	if err != nil {
 		log.Fatal("PEM client error:", err)
 	}
@@ -285,7 +286,7 @@ func ExamplePerformanceTest() {
 
 	// Start performance test server
 	go func() {
-		listener, err := fxeccsocket.Listen("tcp", ":8084", nil)
+		listener, err := umbra.Listen("tcp", ":8084", nil)
 		if err != nil {
 			log.Fatal("Performance test server error:", err)
 		}
@@ -327,7 +328,7 @@ func ExamplePerformanceTest() {
 	// Start multiple clients for concurrent testing
 	for i := 0; i < 3; i++ {
 		go func(clientID int) {
-			conn, err := fxeccsocket.Dial("tcp", "localhost:8084", nil)
+			conn, err := umbra.Dial("tcp", "localhost:8084", nil)
 			if err != nil {
 				log.Printf("Client %d connection error: %v", clientID, err)
 				return

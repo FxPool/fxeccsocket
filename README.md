@@ -18,7 +18,7 @@ A secure network communication library for Go that provides end-to-end encrypted
 ## Installation
 
 ```bash
-go get github.com/fxpool/fxeccsocket
+go get github.com/fxpool/umbra
 ```
 
 ## Quick Start
@@ -30,14 +30,14 @@ package main
 
 import (
     "fmt"
-    "github.com/fxpool/fxeccsocket"
+    "github.com/fxpool/umbra"
     "log"
 )
 
 func main() {
     // Server
     go func() {
-        listener, _ := fxeccsocket.Listen("tcp", ":8080", nil)
+        listener, _ := umbra.Listen("tcp", ":8080", nil)
         defer listener.Close()
         
         conn, _ := listener.Accept()
@@ -49,7 +49,7 @@ func main() {
     }()
 
     // Client
-    conn, _ := fxeccsocket.Dial("tcp", "localhost:8080", nil)
+    conn, _ := umbra.Dial("tcp", "localhost:8080", nil)
     defer conn.Close()
     
     conn.Write([]byte("Hello, secure world!"))
@@ -84,52 +84,52 @@ package main
 import (
     "crypto/elliptic"
     "fmt"
-    "github.com/fxpool/fxeccsocket"
+    "github.com/fxpool/umbra"
     "log"
     "time"
 )
 
 func main() {
     // Generate self-signed certificate for your domain
-    certPEM, keyPEM, err := fxeccsocket.GenerateSelfSignedCert([]string{"pool.yoursite.com"})
+    certPEM, keyPEM, err := umbra.GenerateSelfSignedCert([]string{"pool.yoursite.com"})
     if err != nil {
         log.Fatal(err)
     }
 
     // Server configuration
-    serverConfig := &fxeccsocket.Config{
+    serverConfig := &umbra.Config{
         Curve: elliptic.P256(),
-        TLS: &fxeccsocket.TLSConfig{
+        TLS: &umbra.TLSConfig{
             CertPEM: certPEM,
             KeyPEM:  keyPEM,
         },
-        Obfuscation: &fxeccsocket.ObfuscationConfig{
+        Obfuscation: &umbra.ObfuscationConfig{
             Enabled:   true,
-            Level:     fxeccsocket.ObfuscationLevelAdvanced,
-            Mode:      fxeccsocket.ObfuscationWebSocket,
+            Level:     umbra.ObfuscationLevelAdvanced,
+            Mode:      umbra.ObfuscationWebSocket,
             Domain:    "pool.yoursite.com",  // Your domain
             CoverPath: "/ws",                 // WebSocket endpoint
         },
     }
 
     // Client configuration
-    clientConfig := &fxeccsocket.Config{
+    clientConfig := &umbra.Config{
         Curve: elliptic.P256(),
-        TLS: &fxeccsocket.TLSConfig{
+        TLS: &umbra.TLSConfig{
             ServerName: "pool.yoursite.com",
             SkipVerify: true,  // For self-signed certs
         },
-        Obfuscation: &fxeccsocket.ObfuscationConfig{
+        Obfuscation: &umbra.ObfuscationConfig{
             Enabled:   true,
-            Level:     fxeccsocket.ObfuscationLevelAdvanced,
-            Mode:      fxeccsocket.ObfuscationWebSocket,
+            Level:     umbra.ObfuscationLevelAdvanced,
+            Mode:      umbra.ObfuscationWebSocket,
             Domain:    "pool.yoursite.com",
         },
     }
 
     // Start server
     go func() {
-        listener, err := fxeccsocket.Listen("tcp", ":443", serverConfig)
+        listener, err := umbra.Listen("tcp", ":443", serverConfig)
         if err != nil {
             log.Fatal(err)
         }
@@ -149,7 +149,7 @@ func main() {
     time.Sleep(time.Second)
 
     // Connect with client
-    conn, err := fxeccsocket.Dial("tcp", "localhost:443", clientConfig)
+    conn, err := umbra.Dial("tcp", "localhost:443", clientConfig)
     if err != nil {
         log.Fatal(err)
     }
@@ -165,12 +165,12 @@ The library validates your configuration and provides helpful error messages:
 
 ```go
 // Validate config before use
-if err := fxeccsocket.ValidateConfig(config, isServer); err != nil {
+if err := umbra.ValidateConfig(config, isServer); err != nil {
     log.Fatal(err)
 }
 
 // Or with verbose output
-fxeccsocket.ValidateAndExplain(config, isServer, true)
+umbra.ValidateAndExplain(config, isServer, true)
 ```
 
 ## Important Security Notes
@@ -215,22 +215,22 @@ sudo certbot certonly --standalone -d pool.yoursite.com
 certPEM, _ := os.ReadFile("/etc/letsencrypt/live/pool.yoursite.com/fullchain.pem")
 keyPEM, _ := os.ReadFile("/etc/letsencrypt/live/pool.yoursite.com/privkey.pem")
 
-serverConfig := &fxeccsocket.Config{
-    TLS: &fxeccsocket.TLSConfig{
+serverConfig := &umbra.Config{
+    TLS: &umbra.TLSConfig{
         CertPEM: string(certPEM),
         KeyPEM:  string(keyPEM),
     },
-    Obfuscation: &fxeccsocket.ObfuscationConfig{
+    Obfuscation: &umbra.ObfuscationConfig{
         Enabled: true,
-        Level:   fxeccsocket.ObfuscationLevelAdvanced,
-        Mode:    fxeccsocket.ObfuscationWebSocket,
+        Level:   umbra.ObfuscationLevelAdvanced,
+        Mode:    umbra.ObfuscationWebSocket,
         Domain:  "pool.yoursite.com",
     },
 }
 
 // Client: No need to skip verification!
-clientConfig := &fxeccsocket.Config{
-    TLS: &fxeccsocket.TLSConfig{
+clientConfig := &umbra.Config{
+    TLS: &umbra.TLSConfig{
         ServerName: "pool.yoursite.com",
         SkipVerify: false,  // Real cert, no need to skip
     },
@@ -248,7 +248,7 @@ clientConfig := &fxeccsocket.Config{
 
 ```go
 // Generate self-signed certificate
-certPEM, keyPEM, err := fxeccsocket.GenerateSelfSignedCert([]string{"pool.yoursite.com"})
+certPEM, keyPEM, err := umbra.GenerateSelfSignedCert([]string{"pool.yoursite.com"})
 
 // Client MUST skip verification
 clientConfig.TLS.SkipVerify = true
@@ -296,25 +296,25 @@ server {
 
 ```go
 // Generate key pair
-privKey, err := fxeccsocket.GenerateKey(elliptic.P256())
+privKey, err := umbra.GenerateKey(elliptic.P256())
 
 // Encode/decode keys
-privPEM, _ := fxeccsocket.EncodePrivateKey(privKey)
-pubPEM, _ := fxeccsocket.EncodePublicKey(&privKey.PublicKey)
+privPEM, _ := umbra.EncodePrivateKey(privKey)
+pubPEM, _ := umbra.EncodePublicKey(&privKey.PublicKey)
 
-privKey, _ := fxeccsocket.DecodePrivateKey(privPEM)
-pubKey, _ := fxeccsocket.DecodePublicKey(pubPEM)
+privKey, _ := umbra.DecodePrivateKey(privPEM)
+pubKey, _ := umbra.DecodePublicKey(pubPEM)
 ```
 
 ### Connection Management
 
 ```go
 // Client connection
-conn, err := fxeccsocket.Dial("tcp", "host:port", config)
-conn, err := fxeccsocket.DialTimeout(5*time.Second, "tcp", "host:port", config)
+conn, err := umbra.Dial("tcp", "host:port", config)
+conn, err := umbra.DialTimeout(5*time.Second, "tcp", "host:port", config)
 
 // Server listener
-listener, err := fxeccsocket.Listen("tcp", ":port", config)
+listener, err := umbra.Listen("tcp", ":port", config)
 conn, err := listener.Accept()
 ```
 
@@ -322,10 +322,10 @@ conn, err := listener.Accept()
 
 ```go
 // RSA certificate
-certPEM, keyPEM, err := fxeccsocket.GenerateSelfSignedCert([]string{"domain.com", "192.168.1.1"})
+certPEM, keyPEM, err := umbra.GenerateSelfSignedCert([]string{"domain.com", "192.168.1.1"})
 
 // ECDSA certificate (better performance)
-certPEM, keyPEM, err := fxeccsocket.GenerateSelfSignedCertECDSA([]string{"domain.com"})
+certPEM, keyPEM, err := umbra.GenerateSelfSignedCertECDSA([]string{"domain.com"})
 ```
 
 ## Performance

@@ -1,4 +1,4 @@
-package fxeccsocket
+package umbra
 
 import (
 	"crypto/ecdsa"
@@ -8,8 +8,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
-	"golang.org/x/crypto/hkdf"
 	"io"
+
+	"golang.org/x/crypto/hkdf"
 )
 
 // GenerateKey creates a new ECDSA key pair using the specified curve.
